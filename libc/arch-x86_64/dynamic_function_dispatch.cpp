@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2008 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,23 +26,35 @@
  * SUCH DAMAGE.
  */
 
-#include <private/bionic_asm.h>
+#include <stddef.h>
 
-#define FUNCTION_DELEGATE(name, impl) \
-ENTRY(name); \
-    b impl; \
-END(name)
+#include <private/bionic_ifuncs.h>
 
-FUNCTION_DELEGATE(memchr, __memchr_aarch64_mte)
-FUNCTION_DELEGATE(stpcpy, __stpcpy_aarch64_mte)
-FUNCTION_DELEGATE(strchr, __strchr_aarch64_mte)
-FUNCTION_DELEGATE(strchrnul, __strchrnul_aarch64_mte)
-FUNCTION_DELEGATE(strcmp, __strcmp_aarch64_mte)
-FUNCTION_DELEGATE(strcpy, __strcpy_aarch64_mte)
-FUNCTION_DELEGATE(strlen, __strlen_aarch64_mte)
-FUNCTION_DELEGATE(strrchr, __strrchr_aarch64_mte)
-FUNCTION_DELEGATE(strncmp, __strncmp_aarch64_mte)
-FUNCTION_DELEGATE(memcpy, memcpy_generic)
-FUNCTION_DELEGATE(memmove, memmove_generic)
+extern "C" {
 
-NOTE_GNU_PROPERTY()
+typedef int memcmp_func(const void* __lhs, const void* __rhs, size_t __n);
+DEFINE_IFUNC_FOR(memcmp) {
+  RETURN_FUNC(memcmp_func, memcmp_generic);
+}
+
+typedef void* memmove_func(void* __dst, const void* __src, size_t __n);
+DEFINE_IFUNC_FOR(memmove) {
+  RETURN_FUNC(memmove_func, memmove_generic);
+}
+
+typedef void* memcpy_func(void* __dst, const void* __src, size_t __n);
+DEFINE_IFUNC_FOR(memcpy) {
+  __builtin_cpu_init();
+  if (__builtin_cpu_supports("sse2")) RETURN_FUNC(memcpy_func, memcpy_sse2);
+  if (__builtin_cpu_supports("avx2")) RETURN_FUNC(memcpy_func, memcpy_avx2);
+  RETURN_FUNC(memcpy_func, memmove_generic);
+}
+
+typedef int wmemset_func(const wchar_t* __lhs, const wchar_t* __rhs, size_t __n);
+DEFINE_IFUNC_FOR(wmemset) {
+  __builtin_cpu_init();
+  if (__builtin_cpu_supports("avx2")) RETURN_FUNC(wmemset_func, wmemset_avx2);
+  RETURN_FUNC(wmemset_func, wmemset_freebsd);
+}
+
+}  // extern "C"
